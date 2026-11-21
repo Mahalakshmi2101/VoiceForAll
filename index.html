@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VoiceForAll</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+<style>
+/* ── TOKENS ── */
+:root {
+  --joy-bg: #FFFBF0;
+  --joy-accent: #F5A623;
+  --joy-teal: #00C9B1;
+  --joy-text: #1A1A2E;
+  --joy-sub: #6B6B8A;
+  --calm-bg: #F4F0FF;
+  --calm-surface: #FFFFFF;
+  --calm-purple: #7C5CBF;
+  --calm-purple-light: #E8E0FF;
+  --calm-teal: #3BBFB2;
+  --calm-text: #1E1B2E;
+  --calm-sub: #7A778F;
+  --calm-border: #E2D9F3;
+  --calm-shadow: 0 4px 24px rgba(124,92,191,0.10);
+  --calm-shadow-hover: 0 8px 32px rgba(124,92,191,0.18);
+  --sign-bg: #0E1117;
+  --sign-surface: #161B27;
+  --sign-border: #252D3E;
+  --sign-accent: #3BBFB2;
+  --sign-warm: #F5A623;
+  --sign-text: #EEF0F7;
+  --sign-sub: #8A93AB;
+  --emg-bg: #1A0505;
+  --emg-red: #FF2D2D;
+  --emg-red-glow: rgba(255,45,45,0.35);
+  --radius: 20px;
+  --radius-sm: 12px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Nunito',sans-serif; background:var(--calm-bg); color:var(--calm-text); min-height:100vh; overflow-x:hidden; }
+
+/* MASCOT */
+.mascot-wrap { position:fixed; bottom:24px; right:20px; z-index:999; display:flex; flex-direction:column; align-items:center; gap:0; pointer-events:none; }
+.mascot-figure { width:56px; height:56px; }
+.mascot-figure svg { width:100%; height:100%; }
+.mascot-bubble { background:white; border-radius:14px 14px 14px 2px; padding:6px 10px; font-size:11px; font-weight:800; color:var(--calm-purple); box-shadow:0 4px 16px rgba(124,92,191,0.18); margin-bottom:4px; opacity:0; transform:translateY(6px); transition:all 0.3s ease; white-space:nowrap; }
+.mascot-bubble.show { opacity:1; transform:translateY(0); }
+@keyframes mascot-bounce { 0%,100%{transform:translateY(0) scale(1)} 30%{transform:translateY(-12px) scale(1.08)} 60%{transform:translateY(-5px) scale(1.03)} }
+@keyframes mascot-glow { 0%,100%{filter:drop-shadow(0 0 0px rgba(124,92,191,0))} 50%{filter:drop-shadow(0 0 12px rgba(124,92,191,0.7))} }
+.mascot-figure.speaking { animation:mascot-bounce 0.6s ease,mascot-glow 0.6s ease; }
+
+/* HEADER */
+.header { background:var(--calm-surface); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; box-shadow:0 2px 16px rgba(124,92,191,0.08); position:sticky; top:0; z-index:200; flex-wrap:wrap; gap:10px; }
+.logo-wrap { display:flex; align-items:center; gap:10px; }
+.logo-icon { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,var(--calm-purple),var(--calm-teal)); display:flex; align-items:center; justify-content:center; font-size:20px; }
+.logo { font-family:'Plus Jakarta Sans',sans-serif; font-size:20px; font-weight:800; color:var(--calm-purple); }
+.tagline { font-size:10px; color:var(--calm-sub); font-weight:700; }
+.lang-select { display:flex; gap:6px; flex-wrap:wrap; }
+.lang-btn { padding:6px 12px; border-radius:20px; border:2px solid var(--calm-border); background:var(--calm-surface); color:var(--calm-sub); cursor:pointer; font-size:12px; font-weight:800; font-family:'Nunito',sans-serif; transition:all 0.2s; }
+.lang-btn.active { background:var(--calm-purple); color:#fff; border-color:var(--calm-purple); }
+
+/* MODE SELECT */
+.mode-select { display:flex; gap:12px; padding:16px 20px 0; justify-content:center; flex-wrap:wrap; }
+.mode-btn { padding:12px 24px; border-radius:var(--radius); border:3px solid var(--calm-border); background:var(--calm-surface); color:var(--calm-sub); font-size:14px; cursor:pointer; font-weight:800; font-family:'Nunito',sans-serif; transition:all 0.25s; flex:1; max-width:200px; }
+.mode-btn.active { border-color:var(--calm-purple); background:var(--calm-purple); color:#fff; }
+
+/* EMERGENCY FAB */
+.emergency-fab { position:fixed; bottom:24px; left:20px; z-index:998; background:var(--emg-red); color:#fff; border:none; border-radius:50px; padding:14px 20px; font-size:15px; font-weight:900; font-family:'Nunito',sans-serif; cursor:pointer; box-shadow:0 4px 20px var(--emg-red-glow); display:flex; align-items:center; gap:8px; transition:all 0.2s; }
+.emergency-fab:hover { transform:scale(1.05); }
+
+/* WELCOME */
+#welcome-screen { background:var(--joy-bg); min-height:calc(100vh - 70px); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 24px 120px; text-align:center; }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+.welcome-mascot-fig { width:120px; height:120px; margin:0 auto 24px; animation:float 3s ease-in-out infinite; }
+.welcome-title { font-family:'Plus Jakarta Sans',sans-serif; font-size:28px; font-weight:800; color:var(--joy-text); margin-bottom:10px; }
+.welcome-title span { color:var(--joy-accent); }
+.welcome-sub { font-size:15px; color:var(--joy-sub); font-weight:600; margin-bottom:36px; max-width:300px; line-height:1.6; }
+.welcome-cards { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; width:100%; max-width:480px; }
+.welcome-card { flex:1; min-width:140px; max-width:200px; background:white; border-radius:20px; padding:24px 16px; cursor:pointer; border:3px solid transparent; box-shadow:0 4px 20px rgba(0,0,0,0.07); transition:all 0.25s; text-align:center; }
+.welcome-card:hover { transform:translateY(-6px) scale(1.03); }
+.welcome-card.card-speak { border-color:var(--joy-teal); }
+.welcome-card.card-deaf { border-color:var(--joy-accent); }
+.welcome-card .wc-emoji { font-size:40px; display:block; margin-bottom:12px; }
+.welcome-card .wc-title { font-family:'Plus Jakarta Sans',sans-serif; font-size:15px; font-weight:800; color:var(--joy-text); margin-bottom:4px; }
+.welcome-card .wc-desc { font-size:12px; color:var(--joy-sub); font-weight:600; line-height:1.4; }
+
+/* AAC BOARD */
+#aac-board { padding:16px 20px 120px; background:var(--calm-bg); }
+.calm-banner { background:linear-gradient(135deg,#EDE8FF,#E0F7F5); border-radius:var(--radius); padding:16px 18px; margin-bottom:20px; display:flex; align-items:center; gap:12px; border:2px solid var(--calm-border); }
+.calm-banner-text h2 { font-family:'Plus Jakarta Sans',sans-serif; font-size:15px; font-weight:800; }
+.calm-banner-text p { font-size:12px; color:var(--calm-sub); font-weight:600; margin-top:2px; }
+.categories { display:flex; gap:8px; overflow-x:auto; margin-bottom:20px; scrollbar-width:none; padding-bottom:4px; }
+.categories::-webkit-scrollbar { display:none; }
+.cat-btn { padding:10px 18px; border-radius:50px; border:2px solid var(--calm-border); background:var(--calm-surface); color:var(--calm-sub); cursor:pointer; white-space:nowrap; font-size:14px; font-weight:800; font-family:'Nunito',sans-serif; transition:all 0.2s; }
+.cat-btn.active { background:var(--calm-purple); color:#fff; border-color:var(--calm-purple); }
+.phrases { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+.phrase-btn { padding:20px 12px; border-radius:var(--radius); border:2px solid var(--calm-border); background:var(--calm-surface); color:var(--calm-text); font-size:14px; font-weight:700; font-family:'Nunito',sans-serif; cursor:pointer; text-align:center; transition:all 0.2s; box-shadow:var(--calm-shadow); line-height:1.3; }
+.phrase-btn:hover { transform:translateY(-4px) scale(1.02); box-shadow:var(--calm-shadow-hover); border-color:var(--calm-purple); }
+.phrase-btn:active { transform:scale(0.96); background:var(--calm-purple-light); }
+.phrase-btn .emoji { font-size:36px; display:block; margin-bottom:8px; }
+.speaking-indicator { text-align:center; padding:10px; font-size:14px; color:var(--calm-purple); min-height:36px; font-weight:800; }
+.custom-box { background:var(--calm-surface); border-radius:var(--radius); padding:16px; border:2px solid var(--calm-border); }
+.custom-box textarea { width:100%; background:var(--calm-bg); border:2px solid var(--calm-border); border-radius:var(--radius-sm); color:var(--calm-text); font-size:15px; resize:none; outline:none; font-family:'Nunito',sans-serif; min-height:72px; padding:12px; font-weight:600; transition:border-color 0.2s; }
+.custom-box textarea:focus { border-color:var(--calm-purple); }
+.speak-btn { width:100%; padding:15px; margin-top:10px; background:linear-gradient(135deg,var(--calm-purple),var(--calm-teal)); color:#fff; border:none; border-radius:var(--radius-sm); font-size:16px; font-weight:900; cursor:pointer; font-family:'Nunito',sans-serif; transition:all 0.2s; }
+.speak-btn:hover { transform:translateY(-1px); }
+
+/* EMERGENCY SCREEN */
+#emergency-screen { display:none; position:fixed; inset:0; z-index:500; background:var(--emg-bg); flex-direction:column; align-items:center; justify-content:flex-start; padding:20px 20px 40px; overflow-y:auto; }
+#emergency-screen.active { display:flex; }
+.emg-header { display:flex; align-items:center; justify-content:space-between; width:100%; max-width:480px; margin-bottom:20px; }
+.emg-title { font-family:'Plus Jakarta Sans',sans-serif; font-size:22px; font-weight:800; color:var(--emg-red); display:flex; align-items:center; gap:8px; }
+.emg-pulse { width:12px; height:12px; border-radius:50%; background:var(--emg-red); animation:emg-pulse-anim 1s infinite; }
+@keyframes emg-pulse-anim { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.4)} }
+.emg-close { background:#2a0808; border:2px solid #5a1010; color:#ccc; border-radius:10px; padding:8px 16px; font-size:13px; font-weight:800; font-family:'Nunito',sans-serif; cursor:pointer; }
+.emg-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; width:100%; max-width:480px; margin-bottom:20px; }
+.emg-btn { background:#200808; border:2px solid #5a1010; border-radius:20px; padding:28px 12px; text-align:center; cursor:pointer; font-family:'Nunito',sans-serif; color:#fff; transition:all 0.18s; }
+.emg-btn:hover { border-color:var(--emg-red); transform:scale(1.03); }
+.emg-btn:active { background:var(--emg-red); }
+.emg-btn .emg-emoji { font-size:44px; display:block; margin-bottom:10px; }
+.emg-btn .emg-text { font-size:15px; font-weight:900; line-height:1.3; }
+.emg-custom { width:100%; max-width:480px; background:#200808; border:2px solid #5a1010; border-radius:var(--radius); padding:16px; }
+.emg-custom textarea { width:100%; background:#1a0505; border:2px solid #5a1010; border-radius:var(--radius-sm); color:#fff; font-size:15px; min-height:60px; padding:12px; font-family:'Nunito',sans-serif; font-weight:600; outline:none; resize:none; }
+.emg-speak-btn { width:100%; padding:16px; margin-top:10px; background:var(--emg-red); color:#fff; border:none; border-radius:var(--radius-sm); font-size:17px; font-weight:900; font-family:'Nunito',sans-serif; cursor:pointer; }
+
+/* SIGNSPEAK */
+#signspeak-board { background:var(--sign-bg); min-height:calc(100vh - 120px); padding:20px 20px 100px; color:var(--sign-text); }
+.status-badge { display:inline-block; padding:6px 16px; border-radius:20px; font-size:12px; font-weight:800; margin-bottom:16px; font-family:'Nunito',sans-serif; }
+.status-badge.on { background:rgba(59,191,178,0.15); color:var(--sign-accent); border:1px solid rgba(59,191,178,0.3); }
+.status-badge.off { background:rgba(255,45,45,0.12); color:#FF6060; border:1px solid rgba(255,45,45,0.25); }
+.status-badge.loading { background:rgba(245,166,35,0.12); color:var(--sign-warm); border:1px solid rgba(245,166,35,0.25); }
+.camera-container { position:relative; width:100%; max-width:540px; margin:0 auto 16px; border-radius:var(--radius); overflow:hidden; border:2px solid var(--sign-border); background:#000; }
+#input-video { width:100%; display:block; transform:scaleX(-1); }
+#output-canvas { position:absolute; top:0; left:0; width:100%; height:100%; transform:scaleX(-1); }
+
+/* PROGRESS BAR */
+.gesture-progress-wrap { width:100%; max-width:540px; margin:0 auto 12px; height:6px; background:var(--sign-border); border-radius:3px; overflow:hidden; }
+#gesture-progress-bar { height:100%; width:0%; border-radius:3px; transition:width 0.1s ease, background 0.2s ease; }
+
+.gesture-result { background:var(--sign-surface); border-radius:var(--radius); padding:20px; text-align:center; margin-bottom:16px; border:1px solid var(--sign-border); max-width:540px; margin:0 auto 16px; }
+.gesture-label { font-size:10px; color:var(--sign-sub); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:8px; font-weight:800; }
+.gesture-text { font-family:'Plus Jakarta Sans',sans-serif; font-size:26px; font-weight:800; color:var(--sign-accent); min-height:38px; transition:opacity 0.2s; }
+.gesture-translation { font-size:13px; color:var(--sign-sub); margin-top:4px; min-height:22px; }
+.camera-controls { display:flex; gap:10px; justify-content:center; max-width:540px; margin:0 auto 16px; flex-wrap:wrap; }
+.ctrl-btn { padding:11px 22px; border-radius:var(--radius-sm); border:1px solid var(--sign-border); background:var(--sign-surface); color:var(--sign-text); font-size:14px; cursor:pointer; font-weight:700; font-family:'Nunito',sans-serif; transition:all 0.2s; }
+.ctrl-btn.primary { background:var(--sign-accent); border-color:var(--sign-accent); color:#fff; }
+.sign-panel { max-width:540px; margin:0 auto 16px; background:var(--sign-surface); border-radius:var(--radius); padding:16px; border:1px solid var(--sign-border); }
+.sign-panel h3 { font-size:10px; color:var(--sign-sub); margin-bottom:10px; text-transform:uppercase; letter-spacing:1.5px; font-weight:800; }
+#history-text { font-size:18px; color:var(--sign-text); min-height:56px; line-height:1.6; word-break:break-word; font-weight:600; }
+.history-controls { display:flex; gap:10px; margin-top:12px; }
+.history-controls button { padding:8px 16px; border-radius:var(--radius-sm); font-size:13px; cursor:pointer; border:1px solid var(--sign-border); background:var(--sign-bg); color:var(--sign-sub); font-weight:700; font-family:'Nunito',sans-serif; transition:all 0.2s; }
+.history-controls button:hover { border-color:var(--sign-accent); color:var(--sign-accent); }
+.stt-result { font-size:15px; color:var(--sign-text); min-height:56px; background:var(--sign-bg); border-radius:var(--radius-sm); padding:12px; font-weight:600; line-height:1.5; transition:font-size 0.2s; }
+.stt-btn { width:100%; margin-top:10px; padding:14px; border-radius:var(--radius-sm); border:none; background:var(--sign-accent); color:#fff; font-size:15px; font-weight:800; cursor:pointer; font-family:'Nunito',sans-serif; transition:all 0.2s; }
+.stt-btn.listening { background:#e63946; animation:pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+.gesture-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; }
+.gesture-item { background:var(--sign-bg); border-radius:var(--radius-sm); padding:12px; text-align:center; border:1px solid var(--sign-border); }
+.gesture-item .g-emoji { font-size:28px; display:block; margin-bottom:6px; }
+.gesture-item .g-instruction { font-size:10px; color:var(--sign-sub); font-weight:600; margin-bottom:4px; line-height:1.3; }
+.gesture-item .g-phrase { font-size:12px; color:var(--sign-text); font-weight:800; }
+
+/* UTILS */
+.hidden { display:none !important; }
+@media (max-width:420px) {
+  .phrases { gap:8px; }
+  .phrase-btn { padding:16px 8px; font-size:13px; }
+  .phrase-btn .emoji { font-size:28px; }
+  .lang-btn { padding:5px 8px; font-size:11px; }
+  .emg-btn { padding:20px 8px; }
+  .emg-btn .emg-emoji { font-size:36px; }
+}
+@media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+
+<!-- MASCOT -->
+<div class="mascot-wrap" id="mascot-wrap">
+  <div class="mascot-bubble" id="mascot-bubble">Here for you 💜</div>
+  <div class="mascot-figure" id="mascot-figure">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="50" cy="72" rx="22" ry="18" fill="#7C5CBF"/>
+      <circle cx="50" cy="40" r="22" fill="#FFD6B0"/>
+      <ellipse cx="50" cy="22" rx="22" ry="12" fill="#3D2B1F"/>
+      <rect x="28" y="20" width="44" height="10" fill="#3D2B1F" rx="5"/>
+      <circle cx="42" cy="38" r="3.5" fill="#2D1B0E"/>
+      <circle cx="58" cy="38" r="3.5" fill="#2D1B0E"/>
+      <circle cx="43" cy="37" r="1.2" fill="white"/>
+      <circle cx="59" cy="37" r="1.2" fill="white"/>
+      <path d="M42 48 Q50 55 58 48" stroke="#C07A50" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <ellipse cx="24" cy="68" rx="8" ry="6" fill="#FFD6B0" transform="rotate(-20,24,68)"/>
+      <ellipse cx="76" cy="68" rx="8" ry="6" fill="#FFD6B0" transform="rotate(20,76,68)"/>
+    </svg>
+  </div>
+</div>
+
+<!-- EMERGENCY FAB -->
+<button class="emergency-fab hidden" id="emergency-fab" onclick="EmergencyModule.open()">
+  <span id="emergency-fab-label">🚨 Emergency</span>
+</button>
+<button onclick="App.openProfile()"
+  style="background:#F3F0FF;border:none;border-radius:12px;
+  padding:10px 16px;font-weight:800;color:#6C47FF;
+  font-size:14px;cursor:pointer;font-family:Nunito,sans-serif;">
+  🪪 My Card
+</button>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo-wrap">
+    <div class="logo-icon">🤝</div>
+    <div>
+      <div class="logo">VoiceForAll</div>
+      <div class="tagline">Because silence was never a choice</div>
+    </div>
+  </div>
+  <div class="lang-select" id="lang-select"></div>
+</div>
+
+<!-- WELCOME SCREEN -->
+<div id="welcome-screen">
+  <div class="welcome-mascot-fig">
+    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="50" cy="72" rx="22" ry="18" fill="#7C5CBF"/>
+      <circle cx="50" cy="40" r="22" fill="#FFD6B0"/>
+      <ellipse cx="50" cy="22" rx="22" ry="12" fill="#3D2B1F"/>
+      <rect x="28" y="20" width="44" height="10" fill="#3D2B1F" rx="5"/>
+      <circle cx="42" cy="38" r="3.5" fill="#2D1B0E"/>
+      <circle cx="58" cy="38" r="3.5" fill="#2D1B0E"/>
+      <circle cx="43" cy="37" r="1.2" fill="white"/>
+      <circle cx="59" cy="37" r="1.2" fill="white"/>
+      <path d="M42 48 Q50 56 58 48" stroke="#C07A50" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <ellipse cx="80" cy="58" rx="7" ry="5" fill="#FFD6B0" transform="rotate(-40,80,58)"/>
+    </svg>
+  </div>
+  <h1 class="welcome-title" id="welcome-title">You have a <span>voice</span> here.</h1>
+  <p class="welcome-sub" id="welcome-sub">Choose how you want to communicate today.</p>
+  <div class="welcome-cards">
+    <div class="welcome-card card-speak" onclick="App.setMode('aac')">
+      <span class="wc-emoji">🗣️</span>
+      <div class="wc-title" id="wc-speak-title">I need to speak</div>
+      <div class="wc-desc" id="wc-speak-desc">Tap phrases to say what you feel</div>
+    </div>
+    <div class="welcome-card card-deaf" onclick="App.setMode('deaf')">
+      <span class="wc-emoji">👐</span>
+      <div class="wc-title" id="wc-deaf-title">I am Deaf / Mute</div>
+      <div class="wc-desc" id="wc-deaf-desc">Use hand gestures to communicate</div>
+    </div>
+  </div>
+</div>
+
+<!-- MODE SELECT BAR -->
+<div class="mode-select hidden" id="mode-select">
+  <button class="mode-btn" id="btn-deaf-mode" onclick="App.setMode('deaf')">👐 I am Deaf</button>
+  <button class="mode-btn active" id="btn-speak-mode" onclick="App.setMode('aac')">🗣️ I need to speak</button>
+  <button class="mode-btn" onclick="App.goHome()" style="max-width:80px;flex:0;">🏠</button>
+</div>
+
+<!-- AAC BOARD -->
+<div id="aac-board" class="hidden">
+  <div class="calm-banner">
+    <div class="calm-banner-text">
+      <h2 id="banner-title">You have a voice here.</h2>
+      <p id="banner-sub">Tap any phrase to speak. Switch language anytime.</p>
+    </div>
+  </div>
+  <div class="categories" id="category-strip"></div>
+  <div class="phrases" id="phrase-grid"></div>
+  <div class="speaking-indicator" id="speaking-status"></div>
+  <div class="custom-box">
+    <textarea id="custom-text" placeholder="Type anything and tap Speak..."></textarea>
+    <button class="speak-btn" onclick="App.speakCustomAAC()">▶ Speak</button>
+  </div>
+</div>
+
+<!-- EMERGENCY SCREEN -->
+<div id="emergency-screen">
+  <div class="emg-header">
+    <div class="emg-title">
+      <div class="emg-pulse"></div>
+      <span id="emg-heading">🚨 Emergency</span>
+    </div>
+    <button class="emg-close" onclick="EmergencyModule.close()">✕ Back</button>
+  </div>
+  <div class="emg-grid" id="emg-grid"></div>
+  <div class="emg-custom">
+    <textarea id="emg-custom-text" placeholder="Type to speak anything..."></textarea>
+    <button class="emg-speak-btn" onclick="EmergencyModule.speakCustom()">▶ Speak Now</button>
+  </div>
+</div>
+
+<!-- SIGNSPEAK BOARD -->
+<div id="signspeak-board" class="hidden">
+  <div style="text-align:center; margin-bottom:14px;">
+    <span class="status-badge loading" id="camera-status">⏳ Loading camera...</span>
+  </div>
+  <div class="camera-container">
+    <video id="input-video" autoplay playsinline></video>
+    <canvas id="output-canvas"></canvas>
+  </div>
+  <div class="gesture-progress-wrap">
+    <div id="gesture-progress-bar"></div>
+  </div>
+  <div class="gesture-result">
+    <div class="gesture-label" id="detected-label">Detected Gesture</div>
+    <div class="gesture-text" id="gesture-text">— show your hand —</div>
+    <div class="gesture-translation" id="gesture-translation">Hold a gesture steady to confirm</div>
+  </div>
+  <div class="camera-controls">
+    <button class="ctrl-btn primary" onclick="App.speakGesture()">🔊 Speak this</button>
+    <button class="ctrl-btn" onclick="App.addGestureToSentence()">➕ Add to sentence</button>
+    <button class="ctrl-btn" onclick="App.toggleCamera()" id="cam-toggle-btn">⏸ Pause</button>
+  </div>
+  <div class="sign-panel">
+    <h3 id="built-sentence-label">Built sentence</h3>
+    <div id="history-text">—</div>
+    <div class="history-controls">
+      <button onclick="App.speakSentence()">🔊 Speak sentence</button>
+      <button onclick="App.clearSentence()">🗑 Clear</button>
+    </div>
+  </div>
+  <div class="sign-panel">
+    <h3 id="response-title">👂 Hearing person's response</h3>
+    <div class="stt-result" id="stt-result">Tap the button — the other person speaks into this device</div>
+    <button class="stt-btn" id="stt-btn">🎙 Listen to response</button>
+  </div>
+  <div class="sign-panel">
+    <h3 id="gesture-ref-title">Gesture Reference — 20 Signs</h3>
+    <div class="gesture-grid" id="gesture-guide-grid"></div>
+  </div>
+</div>
+
+<script src="js/data/phrases.js"></script>
+<script src="js/data/gestures.js"></script>
+<script src="js/data/languages.js"></script>
+<script src="js/modules/mascot.js"></script>
+<script src="js/modules/speech.js"></script>
+<script src="js/modules/aac.js"></script>
+<script src="js/modules/emergency.js"></script>
+<script src="js/modules/signspeak.js"></script>
+<script src="js/modules/caregiver.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
