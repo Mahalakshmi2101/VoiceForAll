@@ -72,10 +72,12 @@ const GESTURES = [
     en:'I am sad', hi:'मैं दुखी हूँ', ta:'மனம் வருந்துகிறேன்', te:'నేను దుఃఖంగా ఉన్నాను', ml:'ഞാൻ ദുഃഖിതനാണ്', kn:'ನಾನು ದుಃಖದಲ್ಲಿದ್ದೇನೆ'
   },
   {
-    id: 'scared',
-    emoji: '🤏',
-    instruction: 'PINCH — thumb and index tips almost touching, middle + ring + pinky curled in',
-    en:'I am scared', hi:'मुझे डर लग रहा है', ta:'பயமாக இருக்கிறது', te:'నాకు భయంగా ఉంది', ml:'എനിക്ക് ഭയം തോന്നുന്നു', kn:'ನನಗೆ ಭಯವಾಗುತ್ತಿದೆ'
+    
+  id: 'scared',
+  emoji: '🤌',
+  instruction: 'MIDDLE + PINKY — only middle finger and pinky pointing UP, index + ring + thumb all folded in',
+  en:'I am scared', hi:'मुझे डर लग रहा है', ta:'பயமாக இருக்கிறது', te:'నాకు భయంగా ఉంది', ml:'എനിക്ക് ഭയം തോന്നുന്നു', kn:'ನನಗೆ ಭಯವಾಗುತ್ತಿದೆ'
+
   },
   {
     id: 'home',
