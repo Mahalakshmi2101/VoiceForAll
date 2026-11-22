@@ -343,6 +343,41 @@ const CaregiverModule = (() => {
     document.body.appendChild(overlay);
     _panelVisible = true;
   }
+  function _startSpeechToText(lang, onResult) {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert('Speech recognition not supported on this browser. Use Chrome on Android.');
+    return;
+  }
+
+  const langMap = {
+    en: 'en-IN', hi: 'hi-IN', ta: 'ta-IN',
+    te: 'te-IN', ml: 'ml-IN', kn: 'kn-IN'
+  };
+
+  const recognition = new SpeechRecognition();
+  recognition.lang = langMap[lang] || 'en-IN';
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onresult = (event) => {
+    const spoken = event.results[0][0].transcript;
+    onResult(spoken);
+  };
+
+  recognition.onerror = (event) => {
+    if (event.error === 'no-speech') {
+      alert('No speech detected. Try again.');
+    } else if (event.error === 'not-allowed') {
+      alert('Microphone access denied. Allow mic permission in browser settings.');
+    } else {
+      alert('Error: ' + event.error);
+    }
+  };
+
+  recognition.start();
+  return recognition;
+}
 
   function _onCaregiverResponse(text, lang) {
     closeCaregiverPanel();
@@ -353,31 +388,98 @@ const CaregiverModule = (() => {
   }
 
   function _showCaregiverReply(text, lang) {
-    let el = document.getElementById('vfa-cg-reply-overlay');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'vfa-cg-reply-overlay';
-      el.style.cssText = `
-        position:fixed;inset:0;z-index:10002;
-        background:#6C47FF;
-        display:flex;flex-direction:column;
-        align-items:center;justify-content:center;
-        padding:40px 28px;font-family:'Nunito',sans-serif;
-        cursor:pointer;`;
-      el.onclick = () => { el.style.display = 'none'; };
-      document.body.appendChild(el);
-    }
-    el.innerHTML = `
-      <div style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.65);
-        letter-spacing:0.08em;margin-bottom:16px;">NURSE / DOCTOR SAYS</div>
-      <div style="font-size:36px;font-weight:900;color:#fff;text-align:center;
-        line-height:1.3;max-width:320px;">${text}</div>
-      <div style="margin-top:32px;font-size:13px;color:rgba(255,255,255,0.5);font-weight:600;">
-        Tap anywhere to continue
-      </div>`;
-    el.style.display = 'flex';
-    SpeechModule.vibrate([80, 40, 80, 40, 80]);
+  let el = document.getElementById('vfa-cg-reply-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'vfa-cg-reply-overlay';
+    el.style.cssText = `
+      position:fixed;inset:0;z-index:10002;
+      background:#6C47FF;
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      padding:40px 28px;font-family:'Nunito',sans-serif;`;
+    document.body.appendChild(el);
   }
+
+  el.innerHTML = `
+    <div style="font-size:13px;font-weight:800;color:rgba(255,255,255,0.65);
+      letter-spacing:0.08em;margin-bottom:16px;">NURSE / DOCTOR SAYS</div>
+
+    <div id="vfa-reply-text" style="font-size:36px;font-weight:900;color:#fff;
+      text-align:center;line-height:1.3;max-width:320px;">${text}</div>
+
+    <div style="margin-top:32px;font-size:13px;color:rgba(255,255,255,0.5);
+      font-weight:600;">Tap anywhere to continue</div>
+
+    <!-- Mic button for nurse to speak freely -->
+    <button id="vfa-mic-btn"
+      style="margin-top:28px;background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.4);
+      border-radius:50px;padding:14px 28px;color:#fff;font-size:15px;font-weight:800;
+      font-family:'Nunito',sans-serif;cursor:pointer;display:flex;align-items:center;gap:10px;">
+      🎤 Nurse speaks instead
+    </button>
+
+    <div id="vfa-mic-status" style="margin-top:12px;font-size:13px;
+      color:rgba(255,255,255,0.6);font-weight:600;min-height:20px;"></div>`;
+
+  // Tap background to close
+  el.onclick = (e) => {
+    if (e.target === el || e.target.id === 'vfa-reply-text') {
+      el.style.display = 'none';
+    }
+  };
+
+  // Mic button logic
+  setTimeout(() => {
+    const micBtn = document.getElementById('vfa-mic-btn');
+    const micStatus = document.getElementById('vfa-mic-status');
+    const replyText = document.getElementById('vfa-reply-text');
+    if (!micBtn) return;
+
+    let isListening = false;
+    let recognition = null;
+
+    micBtn.onclick = (e) => {
+      e.stopPropagation();
+
+      if (isListening) {
+        recognition?.stop();
+        return;
+      }
+
+      isListening = true;
+      micBtn.innerHTML = '🔴 Listening... (tap to stop)';
+      micBtn.style.background = 'rgba(255,77,109,0.3)';
+      micBtn.style.borderColor = '#FF4D6D';
+      micStatus.textContent = 'Speak now...';
+
+      recognition = _startSpeechToText(lang, (spoken) => {
+        isListening = false;
+        replyText.textContent = spoken;
+        micBtn.innerHTML = '🎤 Nurse speaks instead';
+        micBtn.style.background = 'rgba(255,255,255,0.15)';
+        micBtn.style.borderColor = 'rgba(255,255,255,0.4)';
+        micStatus.textContent = '✅ Spoken — patient can read above';
+        SpeechModule.speak(spoken, lang, false);
+        SpeechModule.vibrate([80, 40, 80, 40, 80]);
+      });
+
+      if (recognition) {
+        recognition.onend = () => {
+          if (isListening) {
+            isListening = false;
+            micBtn.innerHTML = '🎤 Nurse speaks instead';
+            micBtn.style.background = 'rgba(255,255,255,0.15)';
+            micBtn.style.borderColor = 'rgba(255,255,255,0.4)';
+          }
+        };
+      }
+    };
+  }, 50);
+
+  el.style.display = 'flex';
+  SpeechModule.vibrate([80, 40, 80, 40, 80]);
+}
 
   function closeCaregiverPanel() {
     const el = document.getElementById('vfa-caregiver-overlay');
@@ -392,5 +494,6 @@ const CaregiverModule = (() => {
     openCaregiverPanel,
     closeCaregiverPanel,
     _onCaregiverResponse,
+     _startSpeechToText,
   };
 })();
